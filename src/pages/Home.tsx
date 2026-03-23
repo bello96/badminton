@@ -166,7 +166,7 @@ export default function Home({ onEnterRoom, urlError }: Props) {
 
         <div className="mt-6 pt-4 border-t border-gray-100">
           <p className="text-xs text-gray-400 text-center">
-            操作：A/D 移动 · W 跳跃 · J 挥拍击球
+            操作：← → 移动 · ↑ 跳跃 · ↓ 挥拍击球
           </p>
         </div>
       </div>

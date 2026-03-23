@@ -354,7 +354,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
           {phase !== "playing" && (
             <div className="bg-white rounded-lg px-4 py-2 shadow-sm shrink-0">
               <p className="text-xs text-gray-400 text-center">
-                A/D 或 方向键 移动 · W 或 上键 跳跃 · J 挥拍击球 · 跳起+击球=扣杀
+                ← → 移动 · ↑ 跳跃 · ↓ 挥拍击球 · 跳起+击球=扣杀
               </p>
             </div>
           )}
