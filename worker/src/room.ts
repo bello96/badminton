@@ -72,14 +72,14 @@ const P1_MAX_X = 365;
 const P2_MIN_X = 435;
 const P2_MAX_X = 750;
 
-const SHUTTLE_GRAVITY = 0.15;
-const SHUTTLE_DRAG = 0.992;
+const SHUTTLE_GRAVITY = 0.12;
+const SHUTTLE_DRAG = 0.997;
 const SHUTTLE_RADIUS = 5;
 
-const SWING_DURATION = 12;
-const HIT_START = 3;
-const HIT_END = 6;
-const HIT_RANGE = 55;
+const SWING_DURATION = 14;
+const HIT_START = 2;
+const HIT_END = 8;
+const HIT_RANGE = 60;
 
 const TICK_RATE = 30;
 const TICK_MS = Math.ceil(1000 / TICK_RATE);
@@ -90,8 +90,8 @@ const MAX_SCORE = 30;
 const DEUCE_LEAD = 2;
 
 const MAX_PLAYERS = 2;
-const GRACE_PERIOD = 30_000;
-const QUICK_GRACE = 5_000;
+const GRACE_PERIOD = 15_000;
+const QUICK_GRACE = 3_000;
 const INACTIVITY_TIMEOUT = 5 * 60_000;
 const MAX_CHAT = 200;
 
@@ -420,8 +420,10 @@ export class BadmintonRoom extends DurableObject {
 
   private onInput(att: WsAttachment, msg: Record<string, unknown>) {
     if (this.phase !== "playing") { return; }
+    // 只允许参赛玩家发送输入
+    if (att.playerId !== this.player1Id && att.playerId !== this.player2Id) { return; }
     const input = msg.input as InputState | undefined;
-    if (!input) { return; }
+    if (!input || typeof input !== "object") { return; }
     this.playerInputs.set(att.playerId, {
       left: !!input.left,
       right: !!input.right,
@@ -431,7 +433,9 @@ export class BadmintonRoom extends DurableObject {
   }
 
   private async onChat(att: WsAttachment, msg: Record<string, unknown>) {
-    const text = (msg.text as string || "").trim();
+    const raw = msg.text as string | undefined;
+    if (typeof raw !== "string") { return; }
+    const text = raw.trim();
     if (!text || text.length > 200) { return; }
     const chatMsg: ChatMessage = {
       id: generateId(),
@@ -703,10 +707,10 @@ export class BadmintonRoom extends DurableObject {
       (prevX < NET_X && sh.x >= NET_X) || (prevX > NET_X && sh.x <= NET_X);
 
     if (crossesNet && sh.y > NET_TOP) {
-      // 击中球网
-      sh.x = sh.vx > 0 ? NET_X - SHUTTLE_RADIUS : NET_X + SHUTTLE_RADIUS;
+      // 击中球网 — 停止水平运动，缓慢落下
+      sh.x = prevX < NET_X ? NET_X - SHUTTLE_RADIUS : NET_X + SHUTTLE_RADIUS;
       sh.vx = 0;
-      sh.vy = Math.abs(sh.vy) * 0.3 + 1;
+      sh.vy = 2;
     }
   }
 

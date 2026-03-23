@@ -8,7 +8,7 @@ const GROUND_Y = 400;
 const NET_X = 400;
 const NET_TOP = 280;
 const PLAYER_H = 60;
-const SWING_DURATION = 12;
+const SWING_DURATION = 14;
 
 interface Props {
   players: [PlayerFrameData, PlayerFrameData] | null;
