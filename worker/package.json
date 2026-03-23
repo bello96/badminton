@@ -1,0 +1,13 @@
+{
+  "name": "badminton-worker",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^4.0.0"
+  }
+}
