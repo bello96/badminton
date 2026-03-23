@@ -83,6 +83,7 @@ export default function BadmintonCourt({
 
     const ctx = canvas.getContext("2d")!;
     let animId = 0;
+    const prevXRef = [200, 600];
 
     const observer = new ResizeObserver(() => {
       const rect = container.getBoundingClientRect();
@@ -116,10 +117,17 @@ export default function BadmintonCourt({
         { x: 600, y: GROUND_Y, vy: 0, swingTick: 0, facingRight: false },
       ];
       const pp = f.players || defaultP;
+
+      // 计算移动状态（用于走路动画）
+      const isMoving0 = Math.abs(pp[0].x - (prevXRef[0] ?? 200)) > 0.3;
+      const isMoving1 = Math.abs(pp[1].x - (prevXRef[1] ?? 600)) > 0.3;
+      prevXRef[0] = pp[0].x;
+      prevXRef[1] = pp[1].x;
+
       drawShadow(ctx, pp[0]);
       drawShadow(ctx, pp[1]);
-      drawStickman(ctx, pp[0], "#FFFFFF", 0);
-      drawStickman(ctx, pp[1], "#E84040", 1);
+      drawStickman(ctx, pp[0], "#3B82F6", isMoving0);
+      drawStickman(ctx, pp[1], "#E84040", isMoving1);
 
       if (f.shuttle?.visible) {
         drawShuttle(ctx, f.shuttle);
@@ -272,11 +280,12 @@ function drawStickman(
   ctx: CanvasRenderingContext2D,
   p: PlayerFrameData,
   headColor: string,
-  _index: number,
+  isMoving: boolean,
 ) {
   const x = p.x;
   const feetY = p.y;
   const dir = p.facingRight ? 1 : -1;
+  const inAir = p.y < GROUND_Y - 2;
 
   const headR = 12;
   const neckY = feetY - PLAYER_H + headR + 2;
@@ -288,16 +297,37 @@ function drawStickman(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
+  // 腿部（带走路动画）
+  let leftFootDx = -14;
+  let rightFootDx = 14;
+  let leftFootDy = 0;
+  let rightFootDy = 0;
+
+  if (inAir) {
+    // 空中：腿稍微收起
+    leftFootDx = -10;
+    rightFootDx = 10;
+    leftFootDy = -6;
+    rightFootDy = -6;
+  } else if (isMoving) {
+    // 走路：交替迈腿
+    const phase = Math.sin(Date.now() * 0.015);
+    leftFootDx = -8 + phase * 12;
+    rightFootDx = 8 - phase * 12;
+    leftFootDy = -Math.abs(phase) * 4;
+    rightFootDy = -Math.abs(Math.sin(Date.now() * 0.015 + Math.PI)) * 4;
+  }
+
   // 左腿
   ctx.beginPath();
   ctx.moveTo(x, hipY);
-  ctx.lineTo(x - 14, feetY);
+  ctx.lineTo(x + leftFootDx, feetY + leftFootDy);
   ctx.stroke();
 
   // 右腿
   ctx.beginPath();
   ctx.moveTo(x, hipY);
-  ctx.lineTo(x + 14, feetY);
+  ctx.lineTo(x + rightFootDx, feetY + rightFootDy);
   ctx.stroke();
 
   // 身体

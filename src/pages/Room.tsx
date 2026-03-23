@@ -236,12 +236,14 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
             <div className="flex items-center justify-between bg-white rounded-lg px-4 py-3 shadow-sm shrink-0">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 text-sm">
-                  <span className="font-medium">{p1Player?.name || "玩家1"}</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
+                  <span className="font-medium">{p1Player?.name || "蓝方"}</span>
                   <span className="font-bold text-lg">{score[0]}</span>
                 </div>
                 <span className="text-gray-300 text-xs font-bold">VS</span>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700 text-sm">
-                  <span className="font-medium">{p2Player?.name || "玩家2"}</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
+                  <span className="font-medium">{p2Player?.name || "红方"}</span>
                   <span className="font-bold text-lg">{score[1]}</span>
                 </div>
               </div>
@@ -343,8 +345,8 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
               serving={serving}
               rallyState={rallyState}
               myPlayerIndex={myPlayerIndex}
-              player1Name={p1Player?.name || "玩家1"}
-              player2Name={p2Player?.name || "玩家2"}
+              player1Name={p1Player?.name || "蓝方"}
+              player2Name={p2Player?.name || "红方"}
               onInput={handleInput}
               disabled={phase !== "playing" || myPlayerIndex < 0}
             />
@@ -388,7 +390,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
                 <div className="flex items-center gap-1.5 mb-1 justify-center">
                   <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" />
                   <span className="text-sm font-medium">
-                    {p1Player?.name || "玩家1"}
+                    {p1Player?.name || "蓝方"}
                   </span>
                 </div>
                 <span className="text-2xl font-bold">{score[0]}</span>
@@ -398,7 +400,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
                 <div className="flex items-center gap-1.5 mb-1 justify-center">
                   <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
                   <span className="text-sm font-medium">
-                    {p2Player?.name || "玩家2"}
+                    {p2Player?.name || "红方"}
                   </span>
                 </div>
                 <span className="text-2xl font-bold">{score[1]}</span>

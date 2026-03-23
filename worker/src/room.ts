@@ -72,8 +72,8 @@ const P1_MAX_X = 365;
 const P2_MIN_X = 435;
 const P2_MAX_X = 750;
 
-const SHUTTLE_GRAVITY = 0.12;
-const SHUTTLE_DRAG = 0.997;
+const SHUTTLE_GRAVITY = 0.14;
+const SHUTTLE_DRAG = 0.995;
 const SHUTTLE_RADIUS = 5;
 
 const SWING_DURATION = 14;
@@ -85,7 +85,7 @@ const TICK_RATE = 30;
 const TICK_MS = Math.ceil(1000 / TICK_RATE);
 const SCORE_PAUSE_TICKS = 45;
 
-const DEFAULT_WIN_POINTS = 21;
+const DEFAULT_WIN_POINTS = 11;
 const MAX_SCORE = 30;
 const DEUCE_LEAD = 2;
 
@@ -768,24 +768,24 @@ export class BadmintonRoom extends DurableObject {
 
       if (this.rallyState === "serving") {
         // 发球
-        sh.vx = dir * 8;
-        sh.vy = -7;
+        sh.vx = dir * 5;
+        sh.vy = -6;
       } else {
         // 根据相对位置决定击球类型
         const relY = playerCenterY - sh.y; // 正值=玩家在球下方
 
         if (ps.vy < -2 && relY < -5) {
           // 扣杀（跳起且在球上方）
-          sh.vx = dir * 14;
-          sh.vy = 3 + Math.random() * 2;
+          sh.vx = dir * 9;
+          sh.vy = 2 + Math.random() * 1.5;
         } else if (relY > 15) {
           // 球在玩家上方 → 挑高球
-          sh.vx = dir * 6;
-          sh.vy = -9;
+          sh.vx = dir * 5;
+          sh.vy = -7;
         } else {
           // 平抽
-          sh.vx = dir * 11;
-          sh.vy = -3 + (Math.random() - 0.5) * 2;
+          sh.vx = dir * 7;
+          sh.vy = -2.5 + (Math.random() - 0.5) * 1.5;
         }
       }
 
