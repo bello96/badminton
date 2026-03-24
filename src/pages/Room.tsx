@@ -231,31 +231,32 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
       <div className="flex-1 flex gap-2 min-h-0">
         {/* 左侧：游戏区 */}
         <div className="flex-1 flex flex-col gap-1.5 min-w-0 min-h-0">
-          {/* 游戏中：比分和投降 */}
-          {phase === "playing" && (
+          {/* 游戏中：比分和投降（视角统一：自己始终是蓝方/左边） */}
+          {phase === "playing" && (() => {
+            const isMirror = myPlayerIndex === 1;
+            const leftPlayer = isMirror ? p2Player : p1Player;
+            const rightPlayer = isMirror ? p1Player : p2Player;
+            const leftScore = isMirror ? score[1] : score[0];
+            const rightScore = isMirror ? score[0] : score[1];
+            return (
             <div className="flex items-center justify-between bg-white rounded-lg px-4 py-3 shadow-sm shrink-0">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 text-sm">
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-                  <span className="font-medium">{p1Player?.name || "蓝方"}</span>
-                  <span className="font-bold text-lg">{score[0]}</span>
+                  <span className="font-medium">{leftPlayer?.name || "蓝方"}{myPlayerIndex >= 0 ? "（我）" : ""}</span>
+                  <span className="font-bold text-lg">{leftScore}</span>
                 </div>
                 <span className="text-gray-300 text-xs font-bold">VS</span>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700 text-sm">
                   <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-                  <span className="font-medium">{p2Player?.name || "红方"}</span>
-                  <span className="font-bold text-lg">{score[1]}</span>
+                  <span className="font-medium">{rightPlayer?.name || "红方"}</span>
+                  <span className="font-bold text-lg">{rightScore}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2.5">
                 <span className="text-xs text-gray-400">
                   {winPoints}分制
                 </span>
-                {myPlayerIndex >= 0 && (
-                  <span className="text-xs text-emerald-600 font-medium">
-                    你是{myPlayerIndex === 0 ? "蓝方（左）" : "红方（右）"}
-                  </span>
-                )}
                 <button
                   className="px-2.5 py-1 text-xs rounded-md transition font-medium bg-red-50 text-red-500 hover:bg-red-100"
                   onClick={handleSurrender}
@@ -264,7 +265,8 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
                 </button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* 等待/准备区 */}
           {(phase === "waiting" || phase === "readying") && (

@@ -23,25 +23,36 @@ interface Props {
   disabled: boolean;
 }
 
+/* ── 视角镜像工具 ── */
+function mirrorP(p: PlayerFrameData): PlayerFrameData {
+  return { ...p, x: COURT_W - p.x, facingRight: !p.facingRight };
+}
+function mirrorSh(s: ShuttleFrameData): ShuttleFrameData {
+  return { ...s, x: COURT_W - s.x, vx: -s.vx };
+}
+
 export default function BadmintonCourt({
   players, shuttle, score, rallyState,
-  serving, onInput, disabled,
+  serving, myPlayerIndex, onInput, disabled,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef({ players, shuttle, score, serving, rallyState });
   const keysRef = useRef(new Set<string>());
   const lastInputRef = useRef<string>("");
+  const myIdxRef = useRef(myPlayerIndex);
+  myIdxRef.current = myPlayerIndex;
 
   frameRef.current = { players, shuttle, score, serving, rallyState };
 
-  /* ── 键盘输入：仅方向键 ── */
+  /* ── 键盘输入：仅方向键，player2 左右互换 ── */
   const sendInput = useCallback(() => {
     if (disabled) { return; }
     const keys = keysRef.current;
+    const mirror = myIdxRef.current === 1;
     const input: InputState = {
-      left: keys.has("ArrowLeft"),
-      right: keys.has("ArrowRight"),
+      left: keys.has(mirror ? "ArrowRight" : "ArrowLeft"),
+      right: keys.has(mirror ? "ArrowLeft" : "ArrowRight"),
       up: keys.has("ArrowUp"),
       swing: keys.has("ArrowDown"),
     };
@@ -105,38 +116,56 @@ export default function BadmintonCourt({
 
     function draw() {
       const f = frameRef.current;
+      const mirror = myIdxRef.current === 1;
       ctx.clearRect(0, 0, COURT_W, COURT_H);
 
       drawWall(ctx);
       drawFloor(ctx);
       drawNet(ctx);
 
-      // 默认站位（等待/准备阶段也显示火柴人）
+      // 默认站位
       const defaultP: [PlayerFrameData, PlayerFrameData] = [
         { x: 200, y: GROUND_Y, vy: 0, swingTick: 0, facingRight: true },
         { x: 600, y: GROUND_Y, vy: 0, swingTick: 0, facingRight: false },
       ];
-      const pp = f.players || defaultP;
+      const raw = f.players || defaultP;
 
-      // 计算移动状态（用于走路动画）
-      const isMoving0 = Math.abs(pp[0].x - (prevXRef[0] ?? 200)) > 0.3;
-      const isMoving1 = Math.abs(pp[1].x - (prevXRef[1] ?? 600)) > 0.3;
-      prevXRef[0] = pp[0].x;
-      prevXRef[1] = pp[1].x;
-
-      drawShadow(ctx, pp[0]);
-      drawShadow(ctx, pp[1]);
-      drawStickman(ctx, pp[0], "#3B82F6", isMoving0);
-      drawStickman(ctx, pp[1], "#E84040", isMoving1);
-
-      if (f.shuttle?.visible) {
-        drawShuttle(ctx, f.shuttle);
+      // ★ 视角镜像：player2 看到的画面是水平翻转的，自己始终在左边
+      let rp: [PlayerFrameData, PlayerFrameData];
+      let rSh: ShuttleFrameData | null;
+      let rSc: [number, number];
+      let rSv: number;
+      if (mirror) {
+        rp = [mirrorP(raw[1]), mirrorP(raw[0])];
+        rSh = f.shuttle ? mirrorSh(f.shuttle) : null;
+        rSc = [f.score[1], f.score[0]];
+        rSv = f.serving === 0 ? 1 : 0;
+      } else {
+        rp = [raw[0], raw[1]];
+        rSh = f.shuttle;
+        rSc = f.score;
+        rSv = f.serving;
       }
 
-      drawScoreboard(ctx, f.score);
+      // 走路动画检测
+      const isMoving0 = Math.abs(rp[0].x - (prevXRef[0] ?? 200)) > 0.3;
+      const isMoving1 = Math.abs(rp[1].x - (prevXRef[1] ?? 600)) > 0.3;
+      prevXRef[0] = rp[0].x;
+      prevXRef[1] = rp[1].x;
+
+      drawShadow(ctx, rp[0]);
+      drawShadow(ctx, rp[1]);
+      drawStickman(ctx, rp[0], "#3B82F6", isMoving0);
+      drawStickman(ctx, rp[1], "#E84040", isMoving1);
+
+      if (rSh?.visible) {
+        drawShuttle(ctx, rSh);
+      }
+
+      drawScoreboard(ctx, rSc);
 
       if (f.rallyState === "serving" && f.players) {
-        drawServeHint(ctx, f.serving, f.players);
+        drawServeHint(ctx, rSv, rp);
       }
 
       if (f.rallyState === "scored") {
@@ -161,19 +190,16 @@ export default function BadmintonCourt({
 }
 
 /* ══════════════════════════════════════════
-   绘制函数 — 参考火柴人羽毛球风格
+   绘制函数 — 火柴人羽毛球风格
    ══════════════════════════════════════════ */
 
 function drawWall(ctx: CanvasRenderingContext2D) {
-  // 灰色墙壁
   const g = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
   g.addColorStop(0, "#9E9E9E");
   g.addColorStop(0.5, "#B0B0B0");
   g.addColorStop(1, "#A8A8A8");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, COURT_W, GROUND_Y);
-
-  // 墙壁纹理（细微噪点线条）
   ctx.strokeStyle = "rgba(0,0,0,0.04)";
   ctx.lineWidth = 1;
   for (let y = 10; y < GROUND_Y; y += 18) {
@@ -185,15 +211,12 @@ function drawWall(ctx: CanvasRenderingContext2D) {
 }
 
 function drawFloor(ctx: CanvasRenderingContext2D) {
-  // 木地板
   const g = ctx.createLinearGradient(0, GROUND_Y, 0, COURT_H);
   g.addColorStop(0, "#C8A46E");
   g.addColorStop(0.3, "#BF9B60");
   g.addColorStop(1, "#A07840");
   ctx.fillStyle = g;
   ctx.fillRect(0, GROUND_Y, COURT_W, COURT_H - GROUND_Y);
-
-  // 地板线条纹理
   ctx.strokeStyle = "rgba(0,0,0,0.08)";
   ctx.lineWidth = 1;
   for (let x = 0; x < COURT_W; x += 40) {
@@ -202,19 +225,13 @@ function drawFloor(ctx: CanvasRenderingContext2D) {
     ctx.lineTo(x, COURT_H);
     ctx.stroke();
   }
-
-  // 球场边界线
   ctx.strokeStyle = "rgba(180,140,80,0.6)";
   ctx.lineWidth = 2;
   ctx.strokeRect(30, GROUND_Y + 2, COURT_W - 60, COURT_H - GROUND_Y - 4);
-
-  // 中线
   ctx.beginPath();
   ctx.moveTo(NET_X, GROUND_Y + 2);
   ctx.lineTo(NET_X, COURT_H - 2);
   ctx.stroke();
-
-  // 发球线（虚线）
   ctx.setLineDash([6, 6]);
   ctx.strokeStyle = "rgba(180,140,80,0.5)";
   ctx.beginPath();
@@ -229,38 +246,26 @@ function drawFloor(ctx: CanvasRenderingContext2D) {
 function drawNet(ctx: CanvasRenderingContext2D) {
   const postW = 6;
   const netW = 16;
-
-  // 网柱
   ctx.fillStyle = "#DDDDDD";
   ctx.fillRect(NET_X - postW / 2, NET_TOP - 8, postW, GROUND_Y - NET_TOP + 8);
-
-  // 网柱顶
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(NET_X - postW / 2 - 2, NET_TOP - 10, postW + 4, 6);
-
-  // 网面（半透明白色 + 网格）
   ctx.fillStyle = "rgba(220,230,240,0.4)";
   ctx.fillRect(NET_X - netW / 2, NET_TOP - 4, netW, GROUND_Y - NET_TOP + 4);
-
-  // 网格线
   ctx.strokeStyle = "rgba(255,255,255,0.5)";
   ctx.lineWidth = 0.5;
-  // 水平线
   for (let y = NET_TOP; y <= GROUND_Y; y += 10) {
     ctx.beginPath();
     ctx.moveTo(NET_X - netW / 2, y);
     ctx.lineTo(NET_X + netW / 2, y);
     ctx.stroke();
   }
-  // 垂直线
   for (let x = NET_X - netW / 2; x <= NET_X + netW / 2; x += 4) {
     ctx.beginPath();
     ctx.moveTo(x, NET_TOP - 4);
     ctx.lineTo(x, GROUND_Y);
     ctx.stroke();
   }
-
-  // 顶部白线
   ctx.strokeStyle = "#FFFFFF";
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -297,20 +302,18 @@ function drawStickman(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  // 腿部（带走路动画）
+  // 腿部动画
   let leftFootDx = -14;
   let rightFootDx = 14;
   let leftFootDy = 0;
   let rightFootDy = 0;
 
   if (inAir) {
-    // 空中：腿稍微收起
     leftFootDx = -10;
     rightFootDx = 10;
     leftFootDy = -6;
     rightFootDy = -6;
   } else if (isMoving) {
-    // 走路：交替迈腿
     const phase = Math.sin(Date.now() * 0.015);
     leftFootDx = -8 + phase * 12;
     rightFootDx = 8 - phase * 12;
@@ -318,13 +321,10 @@ function drawStickman(
     rightFootDy = -Math.abs(Math.sin(Date.now() * 0.015 + Math.PI)) * 4;
   }
 
-  // 左腿
   ctx.beginPath();
   ctx.moveTo(x, hipY);
   ctx.lineTo(x + leftFootDx, feetY + leftFootDy);
   ctx.stroke();
-
-  // 右腿
   ctx.beginPath();
   ctx.moveTo(x, hipY);
   ctx.lineTo(x + rightFootDx, feetY + rightFootDy);
@@ -349,12 +349,10 @@ function drawStickman(
   let armAngle: number;
   if (swinging) {
     const progress = p.swingTick / SWING_DURATION;
-    // 从后上方（-150度）挥到前方（30度）
     armAngle = dir > 0
       ? -2.6 + progress * 3.2
       : Math.PI + 2.6 - progress * 3.2;
   } else {
-    // 待机：手臂朝后上方
     armAngle = dir > 0 ? -1.2 : Math.PI + 1.2;
   }
 
@@ -368,11 +366,10 @@ function drawStickman(
   ctx.lineTo(handX, handY);
   ctx.stroke();
 
-  // 球拍柄
-  const racketHandleLen = 18;
+  // 球拍
   const racketAngle = armAngle + (dir > 0 ? -0.3 : 0.3);
-  const racketBaseX = handX + Math.cos(racketAngle) * racketHandleLen;
-  const racketBaseY = handY + Math.sin(racketAngle) * racketHandleLen;
+  const racketBaseX = handX + Math.cos(racketAngle) * 18;
+  const racketBaseY = handY + Math.sin(racketAngle) * 18;
 
   ctx.strokeStyle = "#555";
   ctx.lineWidth = 2.5;
@@ -381,7 +378,6 @@ function drawStickman(
   ctx.lineTo(racketBaseX, racketBaseY);
   ctx.stroke();
 
-  // 球拍面（椭圆）
   ctx.save();
   ctx.translate(racketBaseX, racketBaseY);
   ctx.rotate(racketAngle);
@@ -390,7 +386,6 @@ function drawStickman(
   ctx.beginPath();
   ctx.ellipse(8, 0, 14, 10, 0, 0, Math.PI * 2);
   ctx.stroke();
-  // 网线
   ctx.strokeStyle = "rgba(180,180,180,0.5)";
   ctx.lineWidth = 0.7;
   ctx.beginPath();
@@ -401,7 +396,7 @@ function drawStickman(
   ctx.stroke();
   ctx.restore();
 
-  // 头（最后画，覆盖在身体上方）
+  // 头
   ctx.fillStyle = headColor;
   ctx.strokeStyle = "#111";
   ctx.lineWidth = 2.5;
@@ -429,12 +424,10 @@ function drawShuttle(ctx: CanvasRenderingContext2D, sh: ShuttleFrameData) {
   if (Math.abs(sh.vx) > 0.5 || Math.abs(sh.vy) > 0.5) {
     angle = Math.atan2(sh.vy, sh.vx);
   }
-
   ctx.save();
   ctx.translate(sh.x, sh.y);
   ctx.rotate(angle);
 
-  // 羽毛裙（白色锥形）
   ctx.fillStyle = "#FFF";
   ctx.beginPath();
   ctx.moveTo(-4, 0);
@@ -448,7 +441,6 @@ function drawShuttle(ctx: CanvasRenderingContext2D, sh: ShuttleFrameData) {
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // 羽毛线条
   ctx.strokeStyle = "rgba(180,180,180,0.6)";
   ctx.lineWidth = 0.6;
   for (let i = -7; i <= 7; i += 3.5) {
@@ -458,7 +450,6 @@ function drawShuttle(ctx: CanvasRenderingContext2D, sh: ShuttleFrameData) {
     ctx.stroke();
   }
 
-  // 软木头
   ctx.fillStyle = "#E8C87A";
   ctx.beginPath();
   ctx.arc(0, 0, 5, 0, Math.PI * 2);
@@ -473,28 +464,24 @@ function drawShuttle(ctx: CanvasRenderingContext2D, sh: ShuttleFrameData) {
 function drawScoreboard(ctx: CanvasRenderingContext2D, score: [number, number]) {
   const w = 160;
   const h = 50;
-  const x = COURT_W / 2 - w / 2;
-  const y = 15;
+  const bx = COURT_W / 2 - w / 2;
+  const by = 15;
 
-  // 黑色记分板
   ctx.fillStyle = "#111";
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 6);
+  ctx.roundRect(bx, by, w, h, 6);
   ctx.fill();
-
-  // 边框
   ctx.strokeStyle = "#333";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 6);
+  ctx.roundRect(bx, by, w, h, 6);
   ctx.stroke();
 
-  // LED 风格比分
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#FF2222";
   ctx.font = "bold 32px 'Courier New', monospace";
-  ctx.fillText(`${score[0]} - ${score[1]}`, COURT_W / 2, y + h / 2 + 1);
+  ctx.fillText(`${score[0]}-${score[1]}`, COURT_W / 2, by + h / 2 + 1);
 }
 
 function drawServeHint(
@@ -503,12 +490,10 @@ function drawServeHint(
   players: [PlayerFrameData, PlayerFrameData],
 ) {
   const p = players[serving]!;
-
   ctx.fillStyle = "rgba(0,0,0,0.65)";
   ctx.beginPath();
   ctx.roundRect(p.x - 35, p.y - PLAYER_H - 28, 70, 20, 5);
   ctx.fill();
-
   ctx.fillStyle = "#FFF";
   ctx.font = "bold 11px sans-serif";
   ctx.textAlign = "center";
@@ -519,12 +504,10 @@ function drawServeHint(
 function drawScoredFlash(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = "rgba(0,0,0,0.15)";
   ctx.fillRect(0, 0, COURT_W, COURT_H);
-
   ctx.fillStyle = "rgba(0,0,0,0.7)";
   ctx.beginPath();
   ctx.roundRect(COURT_W / 2 - 50, COURT_H / 2 - 16, 100, 32, 8);
   ctx.fill();
-
   ctx.fillStyle = "#FF4444";
   ctx.font = "bold 18px sans-serif";
   ctx.textAlign = "center";
