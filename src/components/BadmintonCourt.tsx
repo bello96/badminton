@@ -6,9 +6,10 @@ const COURT_W = 800;
 const COURT_H = 450;
 const GROUND_Y = 400;
 const NET_X = 400;
-const NET_TOP = 280;
+const NET_TOP = 300;
 const PLAYER_H = 60;
-const SWING_DURATION = 14;
+const SWING_DURATION = 28;
+
 
 interface Props {
   players: [PlayerFrameData, PlayerFrameData] | null;
@@ -16,9 +17,13 @@ interface Props {
   score: [number, number];
   serving: number;
   rallyState: RallyState;
-  myPlayerIndex: number;
+  mirrored: boolean;
+  player1IsBlue: boolean;
   player1Name: string;
   player2Name: string;
+  playerCount: number;
+  lastScorer: number | null;
+  lastReason: string;
   onInput: (input: InputState) => void;
   disabled: boolean;
 }
@@ -33,28 +38,28 @@ function mirrorSh(s: ShuttleFrameData): ShuttleFrameData {
 
 export default function BadmintonCourt({
   players, shuttle, score, rallyState,
-  serving, myPlayerIndex, onInput, disabled,
+  serving, mirrored, player1IsBlue, playerCount,
+  lastScorer, lastReason, onInput, disabled,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef({ players, shuttle, score, serving, rallyState });
+  const frameRef = useRef({ players, shuttle, score, serving, rallyState, playerCount, mirrored, player1IsBlue, lastScorer, lastReason });
   const keysRef = useRef(new Set<string>());
   const lastInputRef = useRef<string>("");
-  const myIdxRef = useRef(myPlayerIndex);
-  myIdxRef.current = myPlayerIndex;
+  const mirroredRef = useRef(mirrored);
+  mirroredRef.current = mirrored;
 
-  frameRef.current = { players, shuttle, score, serving, rallyState };
+  frameRef.current = { players, shuttle, score, serving, rallyState, playerCount, mirrored, player1IsBlue, lastScorer, lastReason };
 
-  /* ── 键盘输入：仅方向键，player2 左右互换 ── */
+  /* ── 键盘输入：← → 移动，↑ 跳跃，空格击球 ── */
   const sendInput = useCallback(() => {
     if (disabled) { return; }
     const keys = keysRef.current;
-    const mirror = myIdxRef.current === 1;
     const input: InputState = {
-      left: keys.has(mirror ? "ArrowRight" : "ArrowLeft"),
-      right: keys.has(mirror ? "ArrowLeft" : "ArrowRight"),
+      left: keys.has(mirroredRef.current ? "ArrowRight" : "ArrowLeft"),
+      right: keys.has(mirroredRef.current ? "ArrowLeft" : "ArrowRight"),
       up: keys.has("ArrowUp"),
-      swing: keys.has("ArrowDown"),
+      swing: keys.has("Space"),
     };
     const key = JSON.stringify(input);
     if (key !== lastInputRef.current) {
@@ -64,7 +69,7 @@ export default function BadmintonCourt({
   }, [onInput, disabled]);
 
   useEffect(() => {
-    const allowedKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+    const allowedKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "Space"];
     function onKeyDown(e: KeyboardEvent) {
       if (allowedKeys.includes(e.code)) {
         e.preventDefault();
@@ -116,7 +121,7 @@ export default function BadmintonCourt({
 
     function draw() {
       const f = frameRef.current;
-      const mirror = myIdxRef.current === 1;
+      const mirror = f.mirrored;
       ctx.clearRect(0, 0, COURT_W, COURT_H);
 
       drawWall(ctx);
@@ -129,6 +134,7 @@ export default function BadmintonCourt({
         { x: 600, y: GROUND_Y, vy: 0, swingTick: 0, facingRight: false },
       ];
       const raw = f.players || defaultP;
+      const showCount = f.players ? 2 : f.playerCount;
 
       // ★ 视角镜像：player2 看到的画面是水平翻转的，自己始终在左边
       let rp: [PlayerFrameData, PlayerFrameData];
@@ -153,23 +159,43 @@ export default function BadmintonCourt({
       prevXRef[0] = rp[0].x;
       prevXRef[1] = rp[1].x;
 
+      // 颜色跟随加入顺序，不随镜像变化
+      const p1Color = f.player1IsBlue ? "#3B82F6" : "#E84040";
+      const p2Color = f.player1IsBlue ? "#E84040" : "#3B82F6";
+      const leftColor = mirror ? p2Color : p1Color;
+      const rightColor = mirror ? p1Color : p2Color;
       drawShadow(ctx, rp[0]);
-      drawShadow(ctx, rp[1]);
-      drawStickman(ctx, rp[0], "#3B82F6", isMoving0);
-      drawStickman(ctx, rp[1], "#E84040", isMoving1);
+      drawStickman(ctx, rp[0], leftColor, isMoving0);
+      if (showCount >= 2) {
+        drawShadow(ctx, rp[1]);
+        drawStickman(ctx, rp[1], rightColor, isMoving1);
+      }
+
+      if (showCount === 1 && !f.players) {
+        drawWaitingHint(ctx, rp[0]);
+      }
 
       if (rSh?.visible) {
         drawShuttle(ctx, rSh);
       }
 
-      drawScoreboard(ctx, rSc);
+      drawScoreboard(ctx, rSc, leftColor, rightColor);
 
       if (f.rallyState === "serving" && f.players) {
         drawServeHint(ctx, rSv, rp);
       }
 
       if (f.rallyState === "scored") {
-        drawScoredFlash(ctx);
+        // 得分者颜色：scorer 0=player1, 1=player2
+        let scorerColor = "#3B82F6";
+        let scorerLabel = "蓝方得分";
+        if (f.lastScorer !== null) {
+          const scorerIsP1 = f.lastScorer === 0;
+          const isBlue = scorerIsP1 ? f.player1IsBlue : !f.player1IsBlue;
+          scorerColor = isBlue ? "#3B82F6" : "#E84040";
+          scorerLabel = isBlue ? "蓝方得分" : "红方得分";
+        }
+        drawScoredFlash(ctx, scorerLabel, scorerColor, f.lastReason);
       }
 
       animId = requestAnimationFrame(draw);
@@ -195,12 +221,12 @@ export default function BadmintonCourt({
 
 function drawWall(ctx: CanvasRenderingContext2D) {
   const g = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  g.addColorStop(0, "#9E9E9E");
-  g.addColorStop(0.5, "#B0B0B0");
-  g.addColorStop(1, "#A8A8A8");
+  g.addColorStop(0, "#F2F2F2");
+  g.addColorStop(0.5, "#ECECEC");
+  g.addColorStop(1, "#E6E6E6");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, COURT_W, GROUND_Y);
-  ctx.strokeStyle = "rgba(0,0,0,0.04)";
+  ctx.strokeStyle = "rgba(0,0,0,0.03)";
   ctx.lineWidth = 1;
   for (let y = 10; y < GROUND_Y; y += 18) {
     ctx.beginPath();
@@ -212,20 +238,11 @@ function drawWall(ctx: CanvasRenderingContext2D) {
 
 function drawFloor(ctx: CanvasRenderingContext2D) {
   const g = ctx.createLinearGradient(0, GROUND_Y, 0, COURT_H);
-  g.addColorStop(0, "#C8A46E");
-  g.addColorStop(0.3, "#BF9B60");
-  g.addColorStop(1, "#A07840");
+  g.addColorStop(0, "#A8D8B0");
+  g.addColorStop(1, "#8CC896");
   ctx.fillStyle = g;
   ctx.fillRect(0, GROUND_Y, COURT_W, COURT_H - GROUND_Y);
-  ctx.strokeStyle = "rgba(0,0,0,0.08)";
-  ctx.lineWidth = 1;
-  for (let x = 0; x < COURT_W; x += 40) {
-    ctx.beginPath();
-    ctx.moveTo(x, GROUND_Y);
-    ctx.lineTo(x, COURT_H);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = "rgba(180,140,80,0.6)";
+  ctx.strokeStyle = "rgba(255,255,255,0.8)";
   ctx.lineWidth = 2;
   ctx.strokeRect(30, GROUND_Y + 2, COURT_W - 60, COURT_H - GROUND_Y - 4);
   ctx.beginPath();
@@ -233,7 +250,7 @@ function drawFloor(ctx: CanvasRenderingContext2D) {
   ctx.lineTo(NET_X, COURT_H - 2);
   ctx.stroke();
   ctx.setLineDash([6, 6]);
-  ctx.strokeStyle = "rgba(180,140,80,0.5)";
+  ctx.strokeStyle = "rgba(255,255,255,0.6)";
   ctx.beginPath();
   ctx.moveTo(160, GROUND_Y + 2);
   ctx.lineTo(160, COURT_H - 2);
@@ -246,13 +263,13 @@ function drawFloor(ctx: CanvasRenderingContext2D) {
 function drawNet(ctx: CanvasRenderingContext2D) {
   const postW = 6;
   const netW = 16;
-  ctx.fillStyle = "#DDDDDD";
+  ctx.fillStyle = "#888";
   ctx.fillRect(NET_X - postW / 2, NET_TOP - 8, postW, GROUND_Y - NET_TOP + 8);
-  ctx.fillStyle = "#FFFFFF";
+  ctx.fillStyle = "#666";
   ctx.fillRect(NET_X - postW / 2 - 2, NET_TOP - 10, postW + 4, 6);
-  ctx.fillStyle = "rgba(220,230,240,0.4)";
+  ctx.fillStyle = "rgba(100,100,100,0.15)";
   ctx.fillRect(NET_X - netW / 2, NET_TOP - 4, netW, GROUND_Y - NET_TOP + 4);
-  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.strokeStyle = "rgba(80,80,80,0.3)";
   ctx.lineWidth = 0.5;
   for (let y = NET_TOP; y <= GROUND_Y; y += 10) {
     ctx.beginPath();
@@ -266,7 +283,7 @@ function drawNet(ctx: CanvasRenderingContext2D) {
     ctx.lineTo(x, GROUND_Y);
     ctx.stroke();
   }
-  ctx.strokeStyle = "#FFFFFF";
+  ctx.strokeStyle = "#555";
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(NET_X - netW / 2 - 2, NET_TOP - 4);
@@ -461,27 +478,42 @@ function drawShuttle(ctx: CanvasRenderingContext2D, sh: ShuttleFrameData) {
   ctx.restore();
 }
 
-function drawScoreboard(ctx: CanvasRenderingContext2D, score: [number, number]) {
+function drawScoreboard(
+  ctx: CanvasRenderingContext2D,
+  score: [number, number],
+  leftColor: string,
+  rightColor: string,
+) {
   const w = 160;
   const h = 50;
   const bx = COURT_W / 2 - w / 2;
   const by = 15;
+  const cy = by + h / 2 + 1;
 
-  ctx.fillStyle = "#111";
+  ctx.fillStyle = "rgba(240,240,240,0.7)";
   ctx.beginPath();
   ctx.roundRect(bx, by, w, h, 6);
   ctx.fill();
-  ctx.strokeStyle = "#333";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(0,0,0,0.1)";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.roundRect(bx, by, w, h, 6);
   ctx.stroke();
 
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#FF2222";
   ctx.font = "bold 32px 'Courier New', monospace";
-  ctx.fillText(`${score[0]}-${score[1]}`, COURT_W / 2, by + h / 2 + 1);
+  ctx.textBaseline = "middle";
+
+  ctx.textAlign = "right";
+  ctx.fillStyle = leftColor;
+  ctx.fillText(`${score[0]}`, COURT_W / 2 - 10, cy);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#666";
+  ctx.fillText("-", COURT_W / 2, cy);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = rightColor;
+  ctx.fillText(`${score[1]}`, COURT_W / 2 + 10, cy);
 }
 
 function drawServeHint(
@@ -492,25 +524,60 @@ function drawServeHint(
   const p = players[serving]!;
   ctx.fillStyle = "rgba(0,0,0,0.65)";
   ctx.beginPath();
-  ctx.roundRect(p.x - 35, p.y - PLAYER_H - 28, 70, 20, 5);
+  ctx.roundRect(p.x - 35, p.y - PLAYER_H - 58, 70, 20, 5);
   ctx.fill();
   ctx.fillStyle = "#FFF";
   ctx.font = "bold 11px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("按 ↓ 发球", p.x, p.y - PLAYER_H - 18);
+  ctx.fillText("按空格发球", p.x, p.y - PLAYER_H - 48);
 }
 
-function drawScoredFlash(ctx: CanvasRenderingContext2D) {
+function drawWaitingHint(ctx: CanvasRenderingContext2D, p: PlayerFrameData) {
+  const dotCount = Math.floor(Date.now() / 500) % 4;
+  const display = "等待对手加入" + ".".repeat(dotCount);
+  ctx.font = "bold 13px sans-serif";
+  const fixedW = ctx.measureText("等待对手加入...").width + 20;
+  const px = p.x;
+  const py = p.y - PLAYER_H - 56;
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.beginPath();
+  ctx.roundRect(px - fixedW / 2, py - 12, fixedW, 24, 6);
+  ctx.fill();
+  ctx.fillStyle = "#FFF";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(display, px - fixedW / 2 + 10, py);
+}
+
+function drawScoredFlash(
+  ctx: CanvasRenderingContext2D,
+  scorerLabel: string,
+  scorerColor: string,
+  reason: string,
+) {
   ctx.fillStyle = "rgba(0,0,0,0.15)";
   ctx.fillRect(0, 0, COURT_W, COURT_H);
+
+  const boxW = 180;
+  const boxH = reason ? 52 : 36;
+  const bx = COURT_W / 2 - boxW / 2;
+  const by = COURT_H / 2 - boxH / 2;
+
   ctx.fillStyle = "rgba(0,0,0,0.7)";
   ctx.beginPath();
-  ctx.roundRect(COURT_W / 2 - 50, COURT_H / 2 - 16, 100, 32, 8);
+  ctx.roundRect(bx, by, boxW, boxH, 8);
   ctx.fill();
-  ctx.fillStyle = "#FF4444";
-  ctx.font = "bold 18px sans-serif";
+
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("得分!", COURT_W / 2, COURT_H / 2);
+  ctx.fillStyle = scorerColor;
+  ctx.font = "bold 18px sans-serif";
+  ctx.fillText(scorerLabel, COURT_W / 2, reason ? by + 18 : by + boxH / 2);
+
+  if (reason) {
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.font = "13px sans-serif";
+    ctx.fillText(reason, COURT_W / 2, by + 38);
+  }
 }

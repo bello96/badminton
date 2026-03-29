@@ -40,6 +40,7 @@ export default function App() {
   const [nicknameInput, setNicknameInput] = useState("");
   const [urlError, setUrlError] = useState("");
   const [pendingError, setPendingError] = useState("");
+  const [pendingLoading, setPendingLoading] = useState(false);
   const [pendingOwnerName, setPendingOwnerName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export default function App() {
 
   async function confirmPendingJoin(code: string, name: string) {
     setPendingError("");
+    setPendingLoading(true);
     try {
       const res = await fetch(`${getHttpBase()}/api/rooms/${code}`);
       if (!res.ok) {
@@ -97,6 +99,7 @@ export default function App() {
       setPendingCode(null);
     } catch (e) {
       setPendingError((e as Error).message);
+      setPendingLoading(false);
       setTimeout(() => {
         setPendingCode(null);
         setPendingError("");
@@ -157,12 +160,12 @@ export default function App() {
           />
           <button
             className="w-full py-3 px-4 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition disabled:opacity-50"
-            disabled={!nicknameInput.trim() || !!pendingError}
+            disabled={!nicknameInput.trim() || !!pendingError || pendingLoading}
             onClick={() =>
               confirmPendingJoin(pendingCode, nicknameInput.trim())
             }
           >
-            加入
+            {pendingLoading ? "加入中..." : "加入"}
           </button>
         </div>
       </div>

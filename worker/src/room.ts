@@ -61,29 +61,29 @@ interface ShuttleState {
 const COURT_W = 800;
 const GROUND_Y = 400;
 const NET_X = 400;
-const NET_TOP = 280;
+const NET_TOP = 300;
 
 const PLAYER_H = 60;
-const PLAYER_SPEED = 5;
-const JUMP_VY = -12;
-const GRAVITY = 0.5;
+const PLAYER_SPEED = 2.5;
+const JUMP_VY = -6;
+const GRAVITY = 0.25;
 const P1_MIN_X = 50;
 const P1_MAX_X = 365;
 const P2_MIN_X = 435;
 const P2_MAX_X = 750;
 
-const SHUTTLE_GRAVITY = 0.14;
-const SHUTTLE_DRAG = 0.995;
+const SHUTTLE_GRAVITY = 0.07;
+const SHUTTLE_DRAG = 0.9975;
 const SHUTTLE_RADIUS = 5;
 
-const SWING_DURATION = 14;
-const HIT_START = 2;
-const HIT_END = 8;
+const SWING_DURATION = 28;
+const HIT_START = 4;
+const HIT_END = 16;
 const HIT_RANGE = 60;
 
-const TICK_RATE = 30;
+const TICK_RATE = 60;
 const TICK_MS = Math.ceil(1000 / TICK_RATE);
-const SCORE_PAUSE_TICKS = 45;
+const SCORE_PAUSE_TICKS = 90;
 
 const DEFAULT_WIN_POINTS = 11;
 const MAX_SCORE = 30;
@@ -383,10 +383,11 @@ export class BadmintonRoom extends DurableObject {
     const nonOwner = players.find((p) => p.id !== this.ownerId);
     if (!nonOwner || !this.playerReady.get(nonOwner.id)) { return; }
 
-    // 随机分配左右
-    const shuffled = [...players].sort(() => Math.random() - 0.5);
-    this.player1Id = shuffled[0]!.id;
-    this.player2Id = shuffled[1]!.id;
+    // 房主固定为 player1（左侧），拥有首次发球权
+    const owner = players.find((p) => p.id === this.ownerId)!;
+    const opponent = players.find((p) => p.id !== this.ownerId)!;
+    this.player1Id = owner.id;
+    this.player2Id = opponent.id;
     this.score = [0, 0];
     this.serving = 0;
     this.rallyState = "serving";
@@ -402,10 +403,8 @@ export class BadmintonRoom extends DurableObject {
       score: this.score, winner: null,
     });
 
-    const p1Name = shuffled[0]!.name;
-    const p2Name = shuffled[1]!.name;
     const sysMsg = this.addSystemMessage(
-      `比赛开始！${p1Name}（左）vs ${p2Name}（右），${this.winPoints}分制`,
+      `比赛开始！${owner.name}（左）vs ${opponent.name}（右），${this.winPoints}分制`,
     );
     this.broadcast({ type: "chat", message: sysMsg });
     this.broadcast({
@@ -763,29 +762,29 @@ export class BadmintonRoom extends DurableObject {
 
       if (dist > HIT_RANGE) { continue; }
 
-      // 击中！
-      const dir = i === 0 ? 1 : -1;
+      // 击中！方向跟随人物朝向
+      const dir = ps.facingRight ? 1 : -1;
 
       if (this.rallyState === "serving") {
         // 发球
-        sh.vx = dir * 5;
-        sh.vy = -6;
+        sh.vx = dir * 2.5;
+        sh.vy = -4;
       } else {
         // 根据相对位置决定击球类型
         const relY = playerCenterY - sh.y; // 正值=玩家在球下方
 
-        if (ps.vy < -2 && relY < -5) {
+        if (ps.vy < -1 && relY < -5) {
           // 扣杀（跳起且在球上方）
-          sh.vx = dir * 9;
-          sh.vy = 2 + Math.random() * 1.5;
+          sh.vx = dir * 4.5;
+          sh.vy = 0.5 + Math.random() * 0.5;
         } else if (relY > 15) {
           // 球在玩家上方 → 挑高球
-          sh.vx = dir * 5;
-          sh.vy = -7;
+          sh.vx = dir * 2.5;
+          sh.vy = -5;
         } else {
           // 平抽
-          sh.vx = dir * 7;
-          sh.vy = -2.5 + (Math.random() - 0.5) * 1.5;
+          sh.vx = dir * 3.5;
+          sh.vy = -3 + (Math.random() - 0.5) * 0.5;
         }
       }
 

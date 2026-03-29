@@ -7,6 +7,7 @@ interface Props {
   ownerId: string | null;
   myId: string | null;
   phase: GamePhase;
+  playerColorMap: Record<string, "blue" | "red">;
   onPlayAgain?: () => void;
   onTransferOwner: () => void;
   onLeave: () => void;
@@ -26,8 +27,13 @@ const phaseLabel: Record<GamePhase, string> = {
   ended: "已结束",
 };
 
+const teamColorStyle = {
+  blue: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500", label: "蓝方" },
+  red: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500", label: "红方" },
+};
+
 export default function PlayerBar({
-  roomCode, players, ownerId, myId, phase,
+  roomCode, players, ownerId, myId, phase, playerColorMap,
   onPlayAgain, onTransferOwner, onLeave,
 }: Props) {
   const [copied, setCopied] = useState(false);
@@ -75,31 +81,44 @@ export default function PlayerBar({
       </div>
 
       <div className="flex-[2] flex items-center justify-center gap-2">
-        {players.map((p) => (
-          <div
-            key={p.id}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm ${
-              p.id === ownerId
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-gray-50 text-gray-700"
-            } ${p.id === myId ? "font-semibold" : ""} ${!p.online ? "opacity-50" : ""}`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                p.online ? "bg-green-500" : "bg-gray-300"
-              }`}
-            />
-            <span>
-              {p.name}
-              {p.id === myId && (
-                <span className="text-[10px] opacity-50 ml-0.5">(我)</span>
+        {[...players].sort((a, b) => {
+          const ac = playerColorMap[a.id];
+          const bc = playerColorMap[b.id];
+          if (ac === "blue" && bc !== "blue") { return -1; }
+          if (bc === "blue" && ac !== "blue") { return 1; }
+          return 0;
+        }).map((p) => {
+          const color = playerColorMap[p.id];
+          const style = color ? teamColorStyle[color] : null;
+          return (
+            <div
+              key={p.id}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm ${
+                style ? `${style.bg} ${style.text}` : "bg-gray-50 text-gray-700"
+              } ${p.id === myId ? "font-semibold" : ""} ${!p.online ? "opacity-50" : ""}`}
+            >
+              {style && (
+                <span className={`w-2.5 h-2.5 rounded-full ${style.dot}`} />
               )}
-            </span>
-            {p.id === ownerId && (
-              <span className="text-[10px] opacity-60">房主</span>
-            )}
-          </div>
-        ))}
+              {!style && (
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    p.online ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                />
+              )}
+              <span>
+                {p.name}
+                {p.id === myId && (
+                  <span className="text-[10px] opacity-50 ml-0.5">(我)</span>
+                )}
+              </span>
+              {p.id === ownerId && (
+                <span className="text-[10px] opacity-60">房主</span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex-1 flex items-center justify-end gap-2">

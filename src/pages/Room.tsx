@@ -22,7 +22,7 @@ interface Props {
   onLeave: () => void;
 }
 
-const WIN_POINTS_OPTIONS = [11, 21];
+const WIN_POINTS_OPTIONS = [11, 16, 21];
 
 export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
   /* ── 房间状态 ── */
@@ -40,12 +40,18 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
   const [score, setScore] = useState<[number, number]>([0, 0]);
   const [serving, setServing] = useState(0);
   const [rallyState, setRallyState] = useState<RallyState>("serving");
+  const [lastScorer, setLastScorer] = useState<number | null>(null);
+  const [lastReason, setLastReason] = useState("");
 
   /* ── 结束状态 ── */
   const [winner, setWinner] = useState<{ id: string; name: string } | null>(null);
   const [endReason, setEndReason] = useState("");
   const [showConfetti, setShowConfetti] = useState(false);
   const [showEndDialog, setShowEndDialog] = useState(false);
+
+  /* ── UI 状态 ── */
+  const [readySending, setReadySending] = useState(false);
+  const [startSending, setStartSending] = useState(false);
 
   /* ── 聊天 ── */
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -131,6 +137,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
           setPlayer2Id(msg.player2Id);
           setWinPoints(msg.winPoints);
           setScore([0, 0]);
+          setStartSending(false);
           setShowEndDialog(false);
           setShowConfetti(false);
           break;
@@ -143,6 +150,8 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
           break;
         case "pointScored":
           setScore(msg.score);
+          setLastScorer(msg.scorer);
+          setLastReason(msg.reason);
           break;
         case "gameEnd":
           setPhase("ended");
@@ -162,6 +171,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
               p.id === msg.playerId ? { ...p, ready: msg.ready } : p,
             ),
           );
+          setReadySending(false);
           break;
         case "settingsChanged":
           setWinPoints(msg.winPoints);
@@ -172,7 +182,6 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
         case "error":
           break;
         case "roomClosed":
-          alert(msg.reason);
           onLeave();
           break;
       }
@@ -215,6 +224,16 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
   const p1Player = players.find((p) => p.id === player1Id);
   const p2Player = players.find((p) => p.id === player2Id);
 
+  // 颜色绑定房主身份：房主=蓝方，对手=红方，双方视角一致
+  const playerColorMap: Record<string, "blue" | "red"> = {};
+  for (const p of players) {
+    playerColorMap[p.id] = p.id === ownerId ? "blue" : "red";
+  }
+  // player1 是否对应蓝方（房主）
+  const player1IsBlue = !player1Id || player1Id === ownerId;
+  // 房主始终在左侧：当 player1 不是房主时镜像，双方客户端算出同一个值
+  const mirrored = player1Id !== null && player1Id !== ownerId;
+
   return (
     <div className="h-screen bg-[#ecfdf5] flex flex-col p-2 gap-2 overflow-hidden">
       <PlayerBar
@@ -223,6 +242,7 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
         ownerId={ownerId}
         myId={myId}
         phase={phase}
+        playerColorMap={playerColorMap}
         onPlayAgain={handlePlayAgain}
         onTransferOwner={handleTransferOwner}
         onLeave={handleLeave}
@@ -233,24 +253,27 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
         <div className="flex-1 flex flex-col gap-1.5 min-w-0 min-h-0">
           {/* 游戏中：比分和投降（视角统一：自己始终是蓝方/左边） */}
           {phase === "playing" && (() => {
-            const isMirror = myPlayerIndex === 1;
-            const leftPlayer = isMirror ? p2Player : p1Player;
-            const rightPlayer = isMirror ? p1Player : p2Player;
-            const leftScore = isMirror ? score[1] : score[0];
-            const rightScore = isMirror ? score[0] : score[1];
+            const leftPlayer = mirrored ? p2Player : p1Player;
+            const rightPlayer = mirrored ? p1Player : p2Player;
+            const leftScore = mirrored ? score[1] : score[0];
+            const rightScore = mirrored ? score[0] : score[1];
+            // 颜色跟随加入顺序：mirrored 只换位置不换颜色
+            const leftIsBlue = mirrored ? !player1IsBlue : player1IsBlue;
+            const leftIsMe = (mirrored ? player2Id : player1Id) === myId;
+            const rightIsMe = !leftIsMe && myPlayerIndex >= 0;
             return (
             <div className="flex items-center justify-between bg-white rounded-lg px-4 py-3 shadow-sm shrink-0">
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-                  <span className="font-medium">{leftPlayer?.name || "蓝方"}{myPlayerIndex >= 0 ? "（我）" : ""}</span>
-                  <span className="font-bold text-lg">{leftScore}</span>
+                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-xs ${leftIsBlue ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"}`}>
+                  <span className={`w-2 h-2 rounded-full inline-block ${leftIsBlue ? "bg-blue-500" : "bg-red-500"}`} />
+                  <span className="font-medium">{leftPlayer?.name || (leftIsBlue ? "蓝方" : "红方")}{leftIsMe ? "（我）" : ""}</span>
+                  <span className="font-bold">{leftScore}</span>
                 </div>
                 <span className="text-gray-300 text-xs font-bold">VS</span>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-                  <span className="font-medium">{rightPlayer?.name || "红方"}</span>
-                  <span className="font-bold text-lg">{rightScore}</span>
+                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-xs ${leftIsBlue ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>
+                  <span className={`w-2 h-2 rounded-full inline-block ${leftIsBlue ? "bg-red-500" : "bg-blue-500"}`} />
+                  <span className="font-medium">{rightPlayer?.name || (leftIsBlue ? "红方" : "蓝方")}{rightIsMe ? "（我）" : ""}</span>
+                  <span className="font-bold">{rightScore}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2.5">
@@ -306,18 +329,27 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
                     )}
                   </div>
                   <div className="flex items-center gap-2.5">
-                    {!isOwner && (
-                      <button
-                        className={`px-3 py-1 text-xs rounded-md transition font-medium ${
-                          meReady
-                            ? "bg-green-100 text-green-700 hover:bg-green-200"
-                            : "bg-emerald-600 text-white hover:bg-emerald-700"
-                        }`}
-                        onClick={handleReady}
-                      >
-                        {meReady ? "已准备 (取消)" : "准备"}
-                      </button>
-                    )}
+                    {!isOwner && (() => {
+                      const readyPending = !meReady && readySending;
+                      return (
+                        <button
+                          className={`px-3 py-1 text-xs rounded-md transition font-medium ${
+                            meReady
+                              ? "bg-green-100 text-green-700"
+                              : readyPending
+                                ? "bg-emerald-400 text-white"
+                                : "bg-emerald-600 text-white hover:bg-emerald-700"
+                          }`}
+                          onClick={() => {
+                            if (!meReady) { setReadySending(true); }
+                            handleReady();
+                          }}
+                          disabled={readyPending}
+                        >
+                          {meReady ? "已准备" : readyPending ? "准备中..." : "准备"}
+                        </button>
+                      );
+                    })()}
                     {isOwner && (
                       <>
                         <span className="text-xs text-gray-400">
@@ -325,10 +357,13 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
                         </span>
                         <button
                           className="px-3 py-1 text-xs rounded-md transition font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
-                          disabled={!opponentReady}
-                          onClick={handleStartGame}
+                          disabled={!opponentReady || startSending}
+                          onClick={() => {
+                            setStartSending(true);
+                            handleStartGame();
+                          }}
                         >
-                          开始比赛
+                          {startSending ? "开始中..." : "开始比赛"}
                         </button>
                       </>
                     )}
@@ -346,22 +381,18 @@ export default function Room({ roomCode, nickname, playerId, onLeave }: Props) {
               score={score}
               serving={serving}
               rallyState={rallyState}
-              myPlayerIndex={myPlayerIndex}
+              mirrored={mirrored}
+              player1IsBlue={player1IsBlue}
               player1Name={p1Player?.name || "蓝方"}
               player2Name={p2Player?.name || "红方"}
+              playerCount={players.length}
+              lastScorer={lastScorer}
+              lastReason={lastReason}
               onInput={handleInput}
               disabled={phase !== "playing" || myPlayerIndex < 0}
             />
           </div>
 
-          {/* 操作提示 */}
-          {phase !== "playing" && (
-            <div className="bg-white rounded-lg px-4 py-2 shadow-sm shrink-0">
-              <p className="text-xs text-gray-400 text-center">
-                ← → 移动 · ↑ 跳跃 · ↓ 挥拍击球 · 跳起+击球=扣杀
-              </p>
-            </div>
-          )}
         </div>
 
         {/* 右侧：聊天 */}
